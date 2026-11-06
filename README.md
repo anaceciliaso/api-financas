@@ -5,21 +5,21 @@
 
 ---
 
-
-API REST de finanças pessoais feita com **Node.js, Express, MySQL (mysql2), JWT e bcrypt** — projeto final da disciplina de Programação Web Back-end.
-
-Um usuário se cadastra, faz login e registra **lançamentos** (entradas e saídas), cada um com **categoria** e **fonte/destino**. A API gera relatórios por categoria, por fonte/destino, a **previsão das faturas** dos cartões e, como desafio, uma análise de **saúde financeira**.
+## 📚 Sobre o Projeto
+Este repositório contém o código-fonte e a documentação oficial da API REST de finanças pessoais, desenvolvida como projeto final da disciplina de Programação Web Back-End (UTFPR-CP).
+Nela um usuário se cadastra, faz login e registra **lançamentos** (entradas e saídas), cada um com **categoria** e **fonte/destino**. A API gera relatórios por categoria, por fonte/destino, a **previsão das faturas** dos cartões e, como desafio, uma análise de **saúde financeira**.
 
 ---
 
-## 1. Pré-requisitos
+## 1. Tecnologias Utilizadas
 
-| Ferramenta | Versão | Observação |
-|---|---|---|
-| [Node.js](https://nodejs.org) | 18 ou superior (LTS) | já traz o NPM |
-| [MySQL Server](https://dev.mysql.com/downloads/mysql/) | **8.0.16 ou superior** | necessário para as restrições `CHECK` |
-| [VS Code](https://code.visualstudio.com) | — | sugestão: extensões *Postman* e um cliente MySQL |
-| [Postman](https://www.postman.com/downloads/) | — | ou a extensão do Postman no VS Code |
+* **Back-end:** JavaScript com Node.js
+* **Gerenciador de pacotes:** NPM
+* **Pacotes:** Express, JWT e Bcrypt
+* **Banco de dados:** MySQL 
+* **Ambiente de desenvolvimento:** VS Code
+* **Ferramenta de teste de API:** Postman
+
 
 ## 2. Como rodar (passo a passo)
 
@@ -40,10 +40,6 @@ npm run dev
 ```
 
 A API sobe em `http://localhost:3000`.
-
-> **Alternativa ao passo 3** (pelo cliente do MySQL, como no livro):
-> `mysql -u root -p < database/schema.sql` e depois `mysql -u root -p < database/seed.sql`.
-> No PowerShell o `<` não funciona; use `mysql -u root -p -e "source database/schema.sql"`.
 
 ### Scripts do `package.json`
 
@@ -160,34 +156,11 @@ Todas as respostas de erro têm o formato:
 | 409 | e-mail/CPF já cadastrado; nome repetido; exclusão de registro com lançamentos |
 | 500 | erro inesperado (o detalhe vai só para o terminal) |
 
-## 6. Decisões de implementação
-
-**Segurança e unicidade**
-- E-mail e CPF únicos são garantidos pelas restrições `UNIQUE` do banco (`uq_usuarios_email`, `uq_usuarios_cpf`). Não há `SELECT` prévio: o erro `ER_DUP_ENTRY` é capturado e o nome da restrição na `sqlMessage` indica qual campo está duplicado.
-- Antes de gravar, o e-mail vira `trim().toLowerCase()` e o CPF fica só com dígitos.
-- A senha é gravada com `bcrypt` (custo 10). O login busca só pelo e-mail e compara com `bcrypt.compare`. Quando o e-mail não existe, a comparação é feita mesmo assim contra um hash fictício, para que o tempo de resposta não revele quais e-mails estão cadastrados.
-- O id do usuário vem **sempre** de `req.auth.id`; toda consulta filtra por `usuario_id`. Pedir um registro de outra pessoa devolve 404.
-
-**Banco**
-- Restrições no banco: FKs, `UNIQUE`, `CHECK` para valor positivo, parcelas (1 a 48), dias (1 a 31), campos obrigatórios de cartão e limite positivo. Dinheiro é `DECIMAL(12,2)`.
-- Acréscimos ao modelo mínimo: `categorias.classe` (necessidade/desejo, para a regra 50/30/20) e `fontes_destinos.reserva` (reserva de emergência).
-- Uso de **pool** com `mysql2/promise` e `async/await`. As transações (cadastro e parcelamento) usam uma conexão obtida com `pool.getConnection()`.
-- `dateStrings: true` para receber datas como `'AAAA-MM-DD'`. Valores `DECIMAL` e `SUM` (que o mysql2 devolve como texto) são convertidos com `Number()`; somas no JavaScript são feitas em centavos.
-- Usamos **Express 5**, que encaminha automaticamente para o middleware de erros as exceções lançadas em rotas `async`. Por isso as rotas fazem `throw new ErroApi(status, mensagem, campos)` e o `server.js` monta a resposta padrão.
-
-**Regras de negócio**
-- **Categorias/fontes:** não é possível excluir se houver lançamentos (409), nem trocar o `tipo` se já houver lançamentos (409), pois isso quebraria lançamentos existentes.
-- **Parcelamento:** só para saídas em cartão de crédito. Gera uma linha por parcela, todas com a data da compra e o mesmo `grupo_parcelamento` (`crypto.randomUUID()`), dentro de uma transação. O `PUT` altera uma parcela por vez e não muda o número de parcelas.
-- **Listagem:** sem `inicio`/`fim`, usa o mês corrente. O resumo (entradas, saídas, saldo) considera todos os filtros.
-- **Relatório por categoria:** o período anterior tem o mesmo tamanho. Se o período for de meses inteiros (ex.: 01/10 a 31/10), compara com os meses inteiros anteriores (01/09 a 30/09); senão, com a mesma quantidade de dias. `variacao` é `null` quando não há valor no período anterior.
-- **Faturas:** `meses` é a quantidade de faturas a partir da **atual** (a que receberia uma compra feita hoje). Se houver uma fatura que já **fechou mas ainda não venceu**, ela aparece antes, com `status: "fechada"`. O limite utilizado soma todas as parcelas de faturas que ainda não venceram (inclusive além do horizonte pedido).
-- **Modelagem de entradas:** a fonte de uma entrada pode ser uma `renda` (ex.: "Salário ACME") ou uma `conta` (ex.: rendimento da poupança). Transferências entre contas não são modeladas; por isso o saldo de uma conta no relatório considera apenas os lançamentos ligados a ela.
-
-## 7. Desafio — Saúde financeira
+## 6. Desafio — Saúde financeira
 
 `GET /saude-financeira` analisa os **3 últimos meses completos** e o mês atual.
 
-Para não distorcer a análise com compras grandes parceladas, usamos **competência ajustada**: lançamentos à vista contam no mês da data; cada parcela de uma compra parcelada conta no mês de vencimento da fatura em que cai (o notebook de R$ 3.000 em 10× pesa R$ 300 por mês, e não R$ 3.000 em outubro).
+Para não distorcer a análise com compras grandes parceladas, foi usada **competência ajustada**: lançamentos à vista contam no mês da data; cada parcela de uma compra parcelada conta no mês de vencimento da fatura em que cai (o notebook de R$ 3.000 em 10× pesa R$ 300 por mês, e não R$ 3.000 em outubro).
 
 | Indicador | Cálculo | Dica gerada quando… |
 |---|---|---|
@@ -201,17 +174,7 @@ Para não distorcer a análise com compras grandes parceladas, usamos **competê
 
 Os limites ficam na constante `LIMITES` em `utils/saudeFinanceira.js` e também são devolvidos no campo `criterios` da resposta. A resposta sempre contém o campo `aviso` informando que as informações são educativas e não constituem recomendação financeira profissional.
 
-## 8. Roteiro da apresentação (10 min)
-
-1. **Código:** estrutura de pastas, `schema.sql`, `models/Usuario.js` (transação), `routes/lancamentos.js`, `middleware/auth.js`.
-2. **Linha de comando:** `npm install` → `npm run db:reset` → `npm run dev`.
-3. **Unicidade:** pasta *1. Autenticação* — cadastro (201), mesmo e-mail em maiúsculas (409), mesmo CPF sem pontuação (409).
-4. **Login e proteção:** login, requisição sem token (401) e ler/alterar/excluir o lançamento **56** (do Bruno) com o token da Ana (404).
-5. **CRUD:** pastas 2, 3 e 4 — inclui a compra parcelada (Mochila, 3× no Visa) e a saída com categoria de entrada (400).
-6. **Relatórios:** pasta 5 — na previsão de faturas, mostrar onde caiu cada parcela da Mochila e do Notebook.
-7. **Desafio:** pasta 6.
-
-## 9. Checklist
+## 7. Checklist
 
 - [x] Mesmo e-mail com maiúsculas diferentes → 409
 - [x] Mesmo CPF com e sem pontuação → 409
